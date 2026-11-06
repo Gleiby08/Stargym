@@ -1,0 +1,14 @@
+# Variables de entorno (Contiene claves secretas y credenciales)
+.env
+
+# Dependencias de Node
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

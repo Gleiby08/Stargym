@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirmando pago | Stargym</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-page__card" style="text-align: center;">
+      <p class="auth-page__brand">Stargym Checkout</p>
+      <h1 class="auth-page__title">Confirmando tu pago</h1>
+      <p class="auth-page__subtitle" id="payment-status" role="status" aria-live="polite">
+        Estamos consultando de forma segura al proveedor de pago. No cierres esta página.
+      </p>
+      <button type="button" class="btn btn-primary btn-block" id="retry-payment-check" hidden>
+        Verificar de nuevo
+      </button>
+      <p class="auth-page__footer"><a href="profile.html">Ir a mi perfil</a></p>
+      <p class="auth-page__footer"><a href="index.html">Volver al inicio</a></p>
+    </main>
+    <script src="js/payment-return.js"></script>
+  </body>
+</html>

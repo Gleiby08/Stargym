@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | Stargym</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header>
+      <nav class="container nav">
+        <a href="index.html" class="logo-link" aria-label="Stargym inicio">
+          <span class="logo-text logo-text--green">Stargym</span>
+        </a>
+        <div class="nav-cta-group" id="nav-session-actions"></div>
+      </nav>
+    </header>
+
+    <main class="container section-block" aria-labelledby="dashboard-title">
+      <h1 class="section-title" id="dashboard-title">Área privada</h1>
+      <p class="section-sub" id="dash-greeting">Tu progreso Stargym, en un solo lugar.</p>
+
+      <div class="profile-grid">
+        <section class="profile-card" aria-labelledby="membership-title">
+          <h2 class="profile-card__title" id="membership-title">Suscripción</h2>
+          <div class="profile-kv">
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Plan</span>
+              <b id="dash-plan-name">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Estado</span>
+              <b id="dash-plan-status" class="dash-status">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Desde</span>
+              <b id="dash-plan-date">—</b>
+            </div>
+          </div>
+          <a class="btn btn-outline" href="profile.html">Gestionar membresía</a>
+        </section>
+
+        <section class="profile-card" aria-labelledby="wallet-title">
+          <h2 class="profile-card__title" id="wallet-title">Cartera</h2>
+          <p class="profile-kv__label">Saldo disponible</p>
+          <p class="wallet-balance"><b id="dash-wallet-balance">0,00</b> <span>USD</span></p>
+          <a class="btn btn-outline" href="profile.html">Ver pagos y facturas</a>
+        </section>
+
+        <section class="profile-card" id="rutinas" aria-labelledby="routines-title">
+          <h2 class="profile-card__title" id="routines-title">Mis rutinas</h2>
+          <ul class="wallet-tx-list" id="dash-routines-list"></ul>
+        </section>
+
+        <section class="profile-card" aria-labelledby="bookings-title">
+          <h2 class="profile-card__title" id="bookings-title">Reservas de clases</h2>
+          <ul class="wallet-tx-list" id="dash-bookings-list"></ul>
+          <a class="btn btn-outline" href="index.html#clases">Ver clases</a>
+        </section>
+
+        <section class="profile-card" aria-labelledby="payments-title">
+          <h2 class="profile-card__title" id="payments-title">Pagos recientes</h2>
+          <ul class="wallet-tx-list" id="dash-payments-list"></ul>
+          <a class="btn btn-outline" href="profile.html">Abrir mi perfil</a>
+        </section>
+      </div>
+    </main>
+
+    <script src="js/session-ui.js"></script>
+    <script src="js/dashboard.js"></script>
+  </body>
+</html>

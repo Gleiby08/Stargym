@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mi perfil | Stargym</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2L14.8 8.6L22 9.3L16.6 14.1L18.2 21.2L12 17.5L5.8 21.2L7.4 14.1L2 9.3L9.2 8.6L12 2Z' fill='%23b8e83e' stroke='%23823fef' stroke-width='1.5'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="scroll-progress" aria-hidden="true"></div>
+    <header>
+      <nav class="container nav">
+        <a href="index.html" class="logo-link" aria-label="Stargym inicio">
+          <span class="logo-icon-emblem" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14.8 8.6L22 9.3L16.6 14.1L18.2 21.2L12 17.5L5.8 21.2L7.4 14.1L2 9.3L9.2 8.6L12 2Z" fill="url(#brand-star-prof)" stroke="#b8e83e" stroke-width="1.5" stroke-linejoin="round"/>
+              <defs>
+                <linearGradient id="brand-star-prof" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#823fef"/>
+                  <stop offset="1" stop-color="#b8e83e"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </span>
+          <span class="logo-text logo-text--green">Stargym</span>
+        </a>
+        <div class="nav-cta-group" id="nav-session-actions">
+          <a class="btn btn-outline btn-auth-open" href="login.html">Iniciar sesión</a>
+          <a class="btn btn-primary btn-auth-open" href="register.html">Registrarse</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container section-block scroll-section" id="perfil">
+      <h1 class="section-title reveal reveal--up">Mi perfil</h1>
+      <p class="section-sub reveal reveal--up" style="--reveal-delay: 0.08s">
+        Gestiona tu información de cuenta de forma segura.
+      </p>
+
+      <div class="profile-grid">
+        <section class="profile-card profile-card--info reveal reveal--up">
+          <h2 class="profile-card__title">Información</h2>
+          <div class="profile-kv">
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Nombre</span>
+              <b id="profile-name">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Email</span>
+              <b id="profile-email">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Teléfono</span>
+              <b id="profile-phone">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Fecha de nacimiento</span>
+              <b id="profile-dob">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Género</span>
+              <b id="profile-gender">—</b>
+            </div>
+            <div class="profile-kv__item">
+              <span class="profile-kv__label">Verificado</span>
+              <b id="profile-verified">—</b>
+              <span class="verify-badge" id="profile-verified-badge" hidden>—</span>
+            </div>
+          </div>
+          <p class="auth-feedback" id="profile-feedback" hidden role="status"></p>
+          <div class="profile-actions">
+            <button type="button" class="btn btn-outline" id="logout-btn">Cerrar sesión</button>
+            <a class="btn btn-outline" href="index.html">Volver</a>
+          </div>
+        </section>
+
+        <section class="profile-card profile-card--wallet reveal reveal--up" style="--reveal-delay: 0.08s">
+          <h2 class="profile-card__title">Cartera</h2>
+          <div class="payment-methods" style="margin-bottom: 1.25rem;">
+            <h3 class="profile-card__title wallet-subtitle">Métodos de pago</h3>
+            <p class="payment-methods__hint">
+              Consulta qué métodos están habilitados para las recargas.
+            </p>
+            <button type="button" class="btn btn-outline" id="open-destinations-btn">Ver métodos de pago</button>
+          </div>
+
+          <div class="wallet-row">
+            <div>
+              <span class="profile-kv__label">Saldo disponible</span>
+              <p class="wallet-balance"><b id="wallet-balance">—</b> <span id="wallet-currency" style="font-size: 1.1rem; color: var(--text-muted);">USD</span></p>
+            </div>
+          </div>
+          <p class="payment-methods__hint">
+            Recarga tu cartera en USD con Binance Pay o PayPal. El saldo se acredita al confirmar el pago.
+          </p>
+          <form class="auth-form" id="wallet-topup-form" novalidate>
+            <label class="form-field">
+              <span class="form-label">Recargar (USD)</span>
+              <input type="number" name="amount" min="1" step="1" required placeholder="Ej. 20" />
+            </label>
+            <button type="button" class="btn btn-primary btn-block" data-wallet-payment="paypal" disabled>Recargar con PayPal</button>
+            <button type="button" class="btn btn-outline btn-block" data-wallet-payment="binance" disabled>Recargar con Binance Pay</button>
+          </form>
+          <div class="wallet-tx" style="margin-top: 1.5rem;">
+            <h3 class="profile-card__title wallet-subtitle">Movimientos recientes</h3>
+            <ul class="wallet-tx-list" id="wallet-tx-list"></ul>
+          </div>
+        </section>
+
+        <section class="profile-card profile-card--enroll reveal reveal--up" style="--reveal-delay: 0.16s">
+          <h2 class="profile-card__title">Inscripción</h2>
+          <p class="profile-danger-text" id="enroll-help-text" style="color: var(--text-muted);">
+            Elige un plan y págalo con tu cartera, PayPal o Binance Pay. Los planes se cobran por mes sin renovación automática.
+          </p>
+          <div class="plan-actions" style="display: grid; gap: 0.75rem;">
+            <button class="btn btn-outline" type="button" data-plan="essential">Inscribirme Starter (39$)</button>
+            <button class="btn btn-primary" type="button" data-plan="elite">Inscribirme ELITE (79$)</button>
+            <button class="btn btn-outline" type="button" data-plan="pro">Inscribirme CHAMPION (149$)</button>
+          </div>
+          <div class="enrollments" style="margin-top: 1.5rem;">
+            <h3 class="profile-card__title wallet-subtitle">Mis inscripciones</h3>
+            <ul class="wallet-tx-list" id="enrollments-list"></ul>
+          </div>
+        </section>
+
+        <section class="profile-card profile-card--update reveal reveal--up" style="--reveal-delay: 0.08s">
+          <h2 class="profile-card__title">Actualizar datos</h2>
+          <form class="auth-form" id="profile-update-form" novalidate>
+            <label class="form-field">
+              <span class="form-label">Nombre</span>
+              <input type="text" name="name" autocomplete="name" placeholder="Tu nombre" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Teléfono</span>
+              <input type="tel" name="phoneNumber" placeholder="Ej. 600000000" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Nueva contraseña</span>
+              <input
+                type="password"
+                name="password"
+                autocomplete="new-password"
+                minlength="6"
+                placeholder="Dejar en blanco para no cambiar"
+              />
+            </label>
+            <button type="submit" class="btn btn-primary btn-block">Guardar cambios</button>
+          </form>
+        </section>
+
+        <section class="profile-card profile-card--danger reveal reveal--up" style="--reveal-delay: 0.16s">
+          <h2 class="profile-card__title" style="color: #ff9e9e;">Zona peligrosa</h2>
+          <p class="profile-danger-text">
+            Eliminar tu cuenta borrará tu acceso a Stargym. Esta acción no se puede deshacer.
+          </p>
+          <button type="button" class="btn btn-outline profile-danger-btn" id="delete-account-btn">Eliminar cuenta</button>
+        </section>
+      </div>
+    </main>
+
+    <div class="destinations-modal" id="destinations-modal" hidden>
+      <div class="destinations-modal__backdrop" id="destinations-close-backdrop"></div>
+      <section class="destinations-modal__card" role="dialog" aria-modal="true" aria-labelledby="destinations-title">
+        <button type="button" class="destinations-modal__close" id="destinations-close" aria-label="Cerrar">×</button>
+        <h2 id="destinations-title">Destinos de fondos</h2>
+        <p class="destinations-modal__sub">Cuentas receptoras configuradas para ingresos de recargas.</p>
+        <ul class="destinations-list" id="destinations-list"></ul>
+      </section>
+    </div>
+
+    <script src="js/script.js"></script>
+    <script src="js/session-ui.js"></script>
+    <script src="js/profile.js"></script>
+  </body>
+</html>
