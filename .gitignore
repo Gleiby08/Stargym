@@ -1,14 +1,34 @@
-# Variables de entorno (Contiene claves secretas y credenciales)
+# Variables de entorno (excepto la plantilla de ejemplo)
 .env
+.env.*
+!.env.example
 
-# Dependencias de Node
+# Dependencias y artefactos de Node
 node_modules/
-
-# Logs
-logs
-*.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Archivos del sistema
+# Logs y datos locales
+logs/
+*.log
+data/users.json
+
+# Salidas y cachés generadas
+coverage/
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# Claves privadas y certificados locales
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Archivos del sistema y del editor
 .DS_Store
 Thumbs.db
+.idea/
