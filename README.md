@@ -42,14 +42,15 @@ La aplicación solo acredita recargas o activa membresías después de consultar
 
 Al crear una cuenta, Stargym envía un código de seis dígitos por correo. La persona debe introducirlo en `verify.html` para activar la cuenta; el código vence en 10 minutos y se permiten cinco intentos.
 
-Configura estas variables SMTP en `.env` antes de iniciar el servidor:
+Configura un proveedor de correo antes de iniciar el servidor:
 
-*   `SMTP_HOST`, `SMTP_PORT` y `SMTP_SECURE`: datos del servidor de correo. Para Gmail puedes usar `smtp.gmail.com`, puerto `465` y `SMTP_SECURE=true` (o puerto `587` y `false`).
-*   `SMTP_USER` y `SMTP_PASS`: credenciales SMTP. En Gmail utiliza una contraseña de aplicación, no la contraseña normal.
-*   `FROM_EMAIL`: remitente autorizado, por ejemplo `Stargym <tu-correo@gmail.com>`.
+*   **Resend:** configura `RESEND_API_KEY` y `FROM_EMAIL` con una dirección de un dominio verificado en Resend.
+*   **SMTP:** configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` y `FROM_EMAIL`. Para Gmail utiliza una contraseña de aplicación, no la contraseña normal.
 *   `APP_BASE_URL`: URL pública de Stargym en producción; en local, `http://localhost:3000`.
 
-Si SMTP no está configurado o falla el envío, no se activa la cuenta. Puedes copiar `.env.example` a `.env`, reemplazar los valores de ejemplo por los tuyos y reiniciar el servidor. No compartas ni subas `.env`.
+En Render Free no se permite el tráfico SMTP saliente en los puertos `25`, `465` o `587`. Para ese plan, crea una clave API en Resend, verifica un dominio que controles y configura `RESEND_API_KEY` y `FROM_EMAIL` en las variables de entorno de Render. Usa un remitente como `Stargym <no-reply@tu-dominio.com>`. El servidor usa Resend por HTTPS cuando `RESEND_API_KEY` está configurada; si no, conserva el envío SMTP para otros proveedores o despliegues.
+
+Si el proveedor de correo no está configurado o falla el envío, no se activa la cuenta. Para desarrollo local puedes copiar `.env.example` a `.env` y reemplazar los valores de ejemplo por los tuyos. En producción, configura las variables en el panel de Render y reinicia o redespliega el servicio. No compartas ni subas `.env` ni claves API.
 
 ## 🚀 Ejecución
 

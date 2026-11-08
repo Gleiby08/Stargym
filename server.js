@@ -18,6 +18,7 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET debe configurarse con al menos 32 caracteres aleatorios.");
 }
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
 
 const USERS_FILE_PATH = path.join(__dirname, "data", "users.json");
 const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
@@ -757,7 +758,8 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-function hasSmtpConfig() {
+function hasEmailProviderConfig() {
+  if (RESEND_API_KEY) return Boolean(process.env.FROM_EMAIL);
   const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "FROM_EMAIL"];
   return required.every((key) => Boolean(process.env[key]));
 }
@@ -773,37 +775,74 @@ function escapeHtml(value) {
 }
 
 async function sendVerificationEmail({ email, name, code }) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>Bienvenido/a a Stargym, ${escapeHtml(name)}</h2>
+      <p>Ingresa este código en la página de verificación para activar tu cuenta:</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:8px;">${code}</p>
+      <p>El código vence en 10 minutos.</p>
+      <p>Si no solicitaste esta cuenta, ignora este mensaje.</p>
+    </div>
+  `;
+
+  if (RESEND_API_KEY) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: process.env.FROM_EMAIL,
+          to: [email],
+          subject: "Tu código para activar tu cuenta de Stargym",
+          html
+        }),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(`Resend respondió ${response.status}: ${result.message || "No se pudo enviar el correo."}`);
+      }
+      return;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
     secure: String(process.env.SMTP_SECURE || "false") === "true",
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
     }
   });
 
-  await transporter.sendMail({
-    from: process.env.FROM_EMAIL,
-    to: email,
-    subject: "Tu código para activar tu cuenta de Stargym",
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-        <h2>Bienvenido/a a Stargym, ${escapeHtml(name)}</h2>
-        <p>Ingresa este código en la página de verificación para activar tu cuenta:</p>
-        <p style="font-size:28px;font-weight:700;letter-spacing:8px;">${code}</p>
-        <p>El código vence en 10 minutos.</p>
-        <p>Si no solicitaste esta cuenta, ignora este mensaje.</p>
-      </div>
-    `
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.FROM_EMAIL,
+      to: email,
+      subject: "Tu código para activar tu cuenta de Stargym",
+      html
+    });
+  } finally {
+    transporter.close();
+  }
 }
 
 app.post("/api/auth/register", async (req, res) => {
   try {
-    if (!hasSmtpConfig()) {
+    if (!hasEmailProviderConfig()) {
       return res.status(503).json({
-        message: "El envío de correos no está configurado. Contacta al administrador para completar el registro."
+        message: "El envío de correos no está configurado. Configura RESEND_API_KEY y un remitente verificado en Render."
       });
     }
 
@@ -887,7 +926,9 @@ app.post("/api/auth/register", async (req, res) => {
     } catch (error) {
       console.error("No se pudo enviar el código de verificación:", error);
       return res.status(502).json({
-        message: "No se pudo enviar el código a tu correo. Revisa la configuración del correo e inténtalo de nuevo."
+        message: RESEND_API_KEY
+          ? "Resend no pudo enviar el código. Revisa RESEND_API_KEY y que FROM_EMAIL pertenezca a un dominio verificado."
+          : "No se pudo enviar el código por SMTP. Render Free bloquea SMTP; configura Resend para enviar correos."
       });
     }
 
@@ -954,7 +995,7 @@ app.post("/api/auth/verify", async (req, res) => {
 
 app.post("/api/auth/resend-verification", async (req, res) => {
   try {
-    if (!hasSmtpConfig()) {
+    if (!hasEmailProviderConfig()) {
       return res.status(503).json({ message: "El envío de correos no está configurado." });
     }
 
