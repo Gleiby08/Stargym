@@ -99,8 +99,6 @@
 
   function renderStats() {
     document.getElementById("admin-total-users").textContent = String(state.users.length);
-    document.getElementById("admin-verified-users").textContent =
-      String(state.users.filter((user) => user.emailVerified).length);
     document.getElementById("admin-active-memberships").textContent =
       String(state.users.filter((user) => user.enrollments.some((enrollment) => isMembershipActive(enrollment))).length);
   }
@@ -147,17 +145,11 @@
     document.getElementById("admin-selected-name").textContent = user.name || "Sin nombre";
     document.getElementById("admin-selected-email").textContent = user.email;
 
-    const verificationBadge = document.getElementById("admin-verification-badge");
-    verificationBadge.textContent = user.emailVerified ? "Correo verificado" : "Correo pendiente";
-    verificationBadge.classList.toggle("is-success", user.emailVerified);
-    verificationBadge.classList.toggle("is-warning", !user.emailVerified);
-
     const profileForm = document.getElementById("admin-profile-form");
     profileForm.elements.name.value = user.name || "";
     profileForm.elements.phoneNumber.value = user.phoneNumber || "";
     profileForm.elements.dateOfBirth.value = user.dateOfBirth || "";
     profileForm.elements.gender.value = user.gender || "";
-    profileForm.elements.emailVerified.checked = Boolean(user.emailVerified);
     document.getElementById("admin-account-dates").textContent =
       `Cuenta creada: ${dateLabel(user.createdAt)} · Último acceso: ${dateTimeLabel(user.lastLoginAt)}`;
 
@@ -260,8 +252,7 @@
           name: form.elements.name.value,
           phoneNumber: form.elements.phoneNumber.value,
           dateOfBirth: form.elements.dateOfBirth.value || null,
-          gender: form.elements.gender.value,
-          emailVerified: form.elements.emailVerified.checked
+          gender: form.elements.gender.value
         })
       });
       updateUser(result.user);

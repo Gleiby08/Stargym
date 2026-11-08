@@ -4,7 +4,6 @@ const fs = require("fs");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
 const { MongoClient } = require("mongodb");
 
@@ -18,11 +17,6 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET debe configurarse con al menos 32 caracteres aleatorios.");
 }
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
-const GMAIL_CLIENT_ID = String(process.env.GMAIL_CLIENT_ID || "").trim();
-const GMAIL_CLIENT_SECRET = String(process.env.GMAIL_CLIENT_SECRET || "").trim();
-const GMAIL_REFRESH_TOKEN = String(process.env.GMAIL_REFRESH_TOKEN || "").trim();
-let gmailAccessTokenCache = null;
 
 const USERS_FILE_PATH = path.join(__dirname, "data", "users.json");
 const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
@@ -69,11 +63,6 @@ function userRowToAppUser(row) {
     name: row.name,
     email: row.email,
     passwordHash: row.passwordHash,
-    emailVerified: Boolean(row.emailVerified),
-    verificationTokenHash: row.verificationTokenHash,
-    verificationExpiresAt: row.verificationExpiresAt ? new Date(row.verificationExpiresAt).getTime() : null,
-    verificationAttempts: Number(row.verificationAttempts || 0),
-    verificationSentAt: row.verificationSentAt ? new Date(row.verificationSentAt).getTime() : null,
     wallet: row.wallet || { balance: 0, currency: "USD", transactions: [], topupIntents: [] },
     enrollments: Array.isArray(row.enrollments) ? row.enrollments : [],
     revokedTokens: Array.isArray(row.revokedTokens) ? row.revokedTokens : [],
@@ -93,11 +82,6 @@ function appUserToUserRow(user) {
     name: user.name,
     email: user.email,
     passwordHash: user.passwordHash,
-    emailVerified: Boolean(user.emailVerified),
-    verificationTokenHash: user.verificationTokenHash || null,
-    verificationExpiresAt: user.verificationExpiresAt ? new Date(user.verificationExpiresAt).toISOString() : null,
-    verificationAttempts: Number(user.verificationAttempts || 0),
-    verificationSentAt: user.verificationSentAt ? new Date(user.verificationSentAt).toISOString() : null,
     wallet: user.wallet || { balance: 0, currency: "USD", transactions: [], topupIntents: [] },
     enrollments: Array.isArray(user.enrollments) ? user.enrollments : [],
     revokedTokens: Array.isArray(user.revokedTokens) ? user.revokedTokens : [],
@@ -261,7 +245,6 @@ function sanitizeUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    emailVerified: Boolean(user.emailVerified),
     dateOfBirth: user.dateOfBirth, // New field
     phoneNumber: user.phoneNumber, // New field
     gender: user.gender,
@@ -705,12 +688,6 @@ async function confirmPaymentForUser(userId, paymentId) {
   return { user, payment, users };
 }
 
-function createVerificationCode() {
-  const code = String(crypto.randomInt(100000, 1000000));
-  const codeHash = crypto.createHash("sha256").update(code).digest("hex");
-  return { code, codeHash };
-}
-
 async function requireAuth(req, res, next) {
   const header = String(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -744,7 +721,6 @@ async function requireAuth(req, res, next) {
       sub: user.id,
       email: user.email,
       name: user.name,
-      emailVerified: Boolean(user.emailVerified),
     };
     req.authToken = token;
     return next();
@@ -756,189 +732,18 @@ async function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   const email = String(req.auth?.email || "").toLowerCase();
-  if (!ADMIN_EMAIL || email !== ADMIN_EMAIL || !req.auth?.emailVerified) {
+  if (!ADMIN_EMAIL || email !== ADMIN_EMAIL) {
     return res.status(403).json({ message: "No autorizado (admin requerido)." });
   }
   return next();
-}
-
-function hasEmailProviderConfig() {
-  if (RESEND_API_KEY) return Boolean(process.env.FROM_EMAIL);
-  if (GMAIL_CLIENT_ID || GMAIL_CLIENT_SECRET || GMAIL_REFRESH_TOKEN) {
-    return Boolean(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN && process.env.FROM_EMAIL);
-  }
-  const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "FROM_EMAIL"];
-  return required.every((key) => Boolean(process.env[key]));
-}
-
-function getEmailProvider() {
-  if (RESEND_API_KEY) return "Resend";
-  if (GMAIL_CLIENT_ID || GMAIL_CLIENT_SECRET || GMAIL_REFRESH_TOKEN) return "Gmail API";
-  return "SMTP";
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[character]);
 }
 
 function isValidEmailAddress(email) {
   return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(String(email));
 }
 
-async function getGmailAccessToken() {
-  if (gmailAccessTokenCache && gmailAccessTokenCache.expiresAt > Date.now() + 30000) {
-    return gmailAccessTokenCache.value;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: GMAIL_CLIENT_ID,
-        client_secret: GMAIL_CLIENT_SECRET,
-        refresh_token: GMAIL_REFRESH_TOKEN,
-        grant_type: "refresh_token"
-      }),
-      signal: controller.signal
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.access_token) {
-      throw new Error(result.error_description || result.error || `Google respondió ${response.status} al autorizar Gmail.`);
-    }
-    gmailAccessTokenCache = {
-      value: result.access_token,
-      expiresAt: Date.now() + Number(result.expires_in || 3600) * 1000
-    };
-    return gmailAccessTokenCache.value;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function sendGmailApiEmail({ email, from, html }) {
-  if (!isValidEmailAddress(email) || /[\r\n]/.test(from)) {
-    throw new Error("El remitente o destinatario contiene caracteres inválidos.");
-  }
-  const accessToken = await getGmailAccessToken();
-  const subject = Buffer.from("Tu código para activar tu cuenta de Stargym", "utf8").toString("base64");
-  const message = [
-    `From: ${from}`,
-    `To: ${email}`,
-    `Subject: =?UTF-8?B?${subject}?=`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/html; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    Buffer.from(html, "utf8").toString("base64")
-  ].join("\r\n");
-  const raw = Buffer.from(message, "utf8").toString("base64url");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ raw }),
-      signal: controller.signal
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(result.error?.message || `Gmail API respondió ${response.status} al enviar el correo.`);
-    }
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function sendVerificationEmail({ email, name, code }) {
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-      <h2>Bienvenido/a a Stargym, ${escapeHtml(name)}</h2>
-      <p>Ingresa este código en la página de verificación para activar tu cuenta:</p>
-      <p style="font-size:28px;font-weight:700;letter-spacing:8px;">${code}</p>
-      <p>El código vence en 10 minutos.</p>
-      <p>Si no solicitaste esta cuenta, ignora este mensaje.</p>
-    </div>
-  `;
-
-  if (RESEND_API_KEY) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: process.env.FROM_EMAIL,
-          to: [email],
-          subject: "Tu código para activar tu cuenta de Stargym",
-          html
-        }),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(`Resend respondió ${response.status}: ${result.message || "No se pudo enviar el correo."}`);
-      }
-      return;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  if (GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN) {
-    await sendGmailApiEmail({ email, from: process.env.FROM_EMAIL, html });
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: String(process.env.SMTP_SECURE || "false") === "true",
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
-  try {
-    await transporter.sendMail({
-      from: process.env.FROM_EMAIL,
-      to: email,
-      subject: "Tu código para activar tu cuenta de Stargym",
-      html
-    });
-  } finally {
-    transporter.close();
-  }
-}
-
 app.post("/api/auth/register", async (req, res) => {
   try {
-    if (!hasEmailProviderConfig()) {
-      return res.status(503).json({
-        message: "El proveedor de correo no está configurado correctamente. Completa las variables de Resend, Gmail API o SMTP."
-      });
-    }
-
     const name = String(req.body?.name || "").trim();
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
@@ -965,176 +770,35 @@ app.post("/api/auth/register", async (req, res) => {
     const users = await readUsers();
     const existing = users.find((user) => user.email === email);
     const passwordHash = await bcrypt.hash(password, 10);
-    const { code, codeHash } = createVerificationCode();
-    const verificationSentAt = Date.now();
-    const verificationExpiresAt = verificationSentAt + 1000 * 60 * 10;
 
-    if (existing && existing.emailVerified) {
+    if (existing) {
       return res.status(409).json({ message: "Este correo ya esta registrado." });
     }
 
-    let targetUser = existing;
-    if (existing) {
-      existing.name = name;
-      existing.passwordHash = passwordHash;
-      existing.verificationTokenHash = codeHash;
-      existing.verificationExpiresAt = verificationExpiresAt;
-      existing.verificationAttempts = 0;
-      existing.verificationSentAt = verificationSentAt;
-      existing.emailVerified = false;
-      existing.dateOfBirth = dateOfBirth || null;
-      existing.phoneNumber = phoneNumber || null;
-      existing.gender = gender || null;
-      ensureWallet(existing);
-      ensureEnrollments(existing);
-      existing.updatedAt = new Date().toISOString();
-    } else {
-      targetUser = {
-        id: crypto.randomUUID(),
-        name,
-        email,
-        passwordHash,
-        emailVerified: false,
-        verificationTokenHash: codeHash,
-        verificationExpiresAt,
-        verificationAttempts: 0,
-        verificationSentAt,
-        wallet: {
-          balance: 0,
-          currency: "USD",
-          transactions: [],
-          topupIntents: []
-        },
-        enrollments: [],
-        dateOfBirth: dateOfBirth || null,
-        phoneNumber: phoneNumber || null,
-        gender: gender || null,
-        lastLoginAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      users.push(targetUser);
-    }
+    users.push({
+      id: crypto.randomUUID(),
+      name,
+      email,
+      passwordHash,
+      wallet: {
+        balance: 0,
+        currency: "USD",
+        transactions: [],
+        topupIntents: []
+      },
+      enrollments: [],
+      dateOfBirth: dateOfBirth || null,
+      phoneNumber: phoneNumber || null,
+      gender: gender || null,
+      lastLoginAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
 
     await writeUsers(users);
-    try {
-      await sendVerificationEmail({ email, name, code });
-    } catch (error) {
-      console.error("No se pudo enviar el código de verificación:", error);
-      return res.status(502).json({
-        message: RESEND_API_KEY
-          ? "Resend no pudo enviar el código. Revisa RESEND_API_KEY y que FROM_EMAIL pertenezca a un dominio verificado."
-          : getEmailProvider() === "Gmail API"
-            ? "Gmail API no pudo enviar el código. Revisa las credenciales OAuth, los permisos de Gmail y el remitente configurado."
-            : "No se pudo enviar el código por SMTP. Render Free bloquea SMTP; configura un proveedor por HTTPS o usa un plan compatible."
-      });
-    }
-
-    return res.status(201).json({ message: "Cuenta creada. Te enviamos un código de verificación a tu correo." });
+    return res.status(201).json({ message: "Cuenta creada. Ya puedes iniciar sesión." });
   } catch (error) {
     return res.status(500).json({ message: `No se pudo registrar: ${error.message}` });
-  }
-});
-
-app.post("/api/auth/verify", async (req, res) => {
-  try {
-    const email = normalizeEmail(req.body?.email);
-    const code = String(req.body?.code || "").trim();
-    if (!email || !/^\d{6}$/.test(code)) {
-      return res.status(400).json({ message: "Ingresa el correo y el código de seis dígitos." });
-    }
-
-    const users = await readUsers();
-    const user = users.find((item) => item.email === email);
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado." });
-    }
-
-    if (user.emailVerified) {
-      return res.json({ message: "Tu cuenta ya estaba verificada." });
-    }
-
-    if (Number(user.verificationAttempts || 0) >= 5) {
-      return res.status(429).json({ message: "Se agotaron los intentos. Registra de nuevo el correo para recibir otro código." });
-    }
-
-    if (Date.now() > Number(user.verificationExpiresAt || 0)) {
-      return res.status(400).json({ message: "El código expiró. Usa «Reenviar código» para solicitar otro." });
-    }
-
-    const codeHash = crypto.createHash("sha256").update(code).digest("hex");
-    const validCode = user.verificationTokenHash
-      && crypto.timingSafeEqual(Buffer.from(user.verificationTokenHash, "hex"), Buffer.from(codeHash, "hex"));
-    if (!validCode) {
-      user.verificationAttempts = Number(user.verificationAttempts || 0) + 1;
-      await writeUsers(users);
-      const attemptsLeft = Math.max(0, 5 - user.verificationAttempts);
-      return res.status(user.verificationAttempts >= 5 ? 429 : 400).json({
-        message: attemptsLeft
-          ? `El código no es correcto. Te quedan ${attemptsLeft} intentos.`
-          : "Se agotaron los intentos. Registra de nuevo el correo para recibir otro código."
-      });
-    }
-
-    user.emailVerified = true;
-    user.verificationTokenHash = null;
-    user.verificationExpiresAt = null;
-    user.verificationAttempts = 0;
-    user.verificationSentAt = null;
-    user.updatedAt = new Date().toISOString();
-
-    await writeUsers(users);
-    return res.json({ message: "Correo verificado correctamente." });
-  } catch (error) {
-    return res.status(500).json({ message: `No se pudo verificar: ${error.message}` });
-  }
-});
-
-app.post("/api/auth/resend-verification", async (req, res) => {
-  try {
-    if (!hasEmailProviderConfig()) {
-      return res.status(503).json({ message: "El proveedor de correo no está configurado correctamente." });
-    }
-
-    const email = normalizeEmail(req.body?.email);
-    if (!isValidEmailAddress(email)) return res.status(400).json({ message: "Ingresa un correo electrónico válido." });
-
-    const users = await readUsers();
-    const user = users.find((item) => item.email === email);
-    if (!user || user.emailVerified) {
-      return res.json({ message: "Si existe una cuenta pendiente para ese correo, recibirás un código." });
-    }
-
-    const resendWait = 60 * 1000 - (Date.now() - Number(user.verificationSentAt || 0));
-    if (resendWait > 0) {
-      return res.status(429).json({
-        message: `Espera ${Math.ceil(resendWait / 1000)} segundos antes de solicitar otro código.`
-      });
-    }
-
-    const { code, codeHash } = createVerificationCode();
-    user.verificationTokenHash = codeHash;
-    user.verificationExpiresAt = Date.now() + 1000 * 60 * 10;
-    user.verificationAttempts = 0;
-    user.verificationSentAt = Date.now();
-    user.updatedAt = new Date().toISOString();
-    await writeUsers(users);
-
-    try {
-      await sendVerificationEmail({ email, name: user.name, code });
-    } catch (error) {
-      console.error("No se pudo reenviar el código de verificación:", error);
-      return res.status(502).json({
-        message: getEmailProvider() === "Gmail API"
-          ? "Gmail API no pudo enviar el código. Revisa las credenciales OAuth, los permisos de Gmail y el remitente configurado."
-          : "No se pudo enviar el código. Revisa la configuración del proveedor e inténtalo de nuevo."
-      });
-    }
-
-    return res.json({ message: "Te enviamos un nuevo código de verificación." });
-  } catch (error) {
-    return res.status(500).json({ message: `No se pudo reenviar el código: ${error.message}` });
   }
 });
 
@@ -1155,10 +819,6 @@ app.post("/api/auth/login", async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       return res.status(401).json({ message: "Credenciales invalidas." });
-    }
-
-    if (!user.emailVerified) {
-      return res.status(403).json({ message: "Debes verificar tu correo antes de iniciar sesion." });
     }
 
     user.lastLoginAt = new Date().toISOString();
@@ -1593,15 +1253,14 @@ app.get("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
 
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { name, phoneNumber, dateOfBirth, gender, emailVerified } = req.body || {};
+    const { name, phoneNumber, dateOfBirth, gender } = req.body || {};
     if (
       typeof name !== "string" ||
       !name.trim() ||
       name.trim().length > 100 ||
       typeof phoneNumber !== "string" ||
       (dateOfBirth !== null && typeof dateOfBirth !== "string") ||
-      typeof gender !== "string" ||
-      typeof emailVerified !== "boolean"
+      typeof gender !== "string"
     ) {
       return res.status(400).json({ message: "Revisa los datos del perfil." });
     }
@@ -1625,15 +1284,10 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) =>
     const users = await readUsers();
     const user = users.find((item) => item.id === String(req.params.id || ""));
     if (!user) return res.status(404).json({ message: "Usuario no encontrado." });
-    if (normalizeEmail(user.email) === ADMIN_EMAIL && !emailVerified) {
-      return res.status(403).json({ message: "No se puede desactivar la verificación de la cuenta administradora." });
-    }
-
     user.name = name.trim();
     user.phoneNumber = phoneNumber.trim() || null;
     user.dateOfBirth = dateOfBirth || null;
     user.gender = gender.trim().slice(0, 40) || null;
-    user.emailVerified = emailVerified;
     user.updatedAt = new Date().toISOString();
     await writeUsers(users);
     return res.json({ message: "Perfil actualizado.", user: sanitizeAdminUser(user) });

@@ -135,9 +135,6 @@ async function main() {
       { id: created.id },
       {
         $set: {
-          emailVerified: true,
-          verificationTokenHash: null,
-          verificationExpiresAt: null,
           wallet: {
             balance: 50,
             currency: "USD",

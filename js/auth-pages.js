@@ -2,7 +2,7 @@
  * auth-pages.js — Stargym
  * Funciona en dos modos automáticamente:
  *  1. Con servidor Node.js (localhost:3000): usa la API real
- *  2. Sin servidor: el registro requiere el backend para enviar y validar el código
+ *  2. Sin servidor: utiliza las cuentas locales de demostración
  */
 
 const SESSION_KEY = "stargym_session";
@@ -43,7 +43,6 @@ function getLocalUsers() {
       name: "Gleiby Barreto",
       email: "gleiby07@gmail.com",
       password: "123456",
-      emailVerified: true,
       gender: "Hombre",
       phoneNumber: "600123456",
       dateOfBirth: "1995-05-15",
@@ -57,7 +56,6 @@ function getLocalUsers() {
       name: "Usuario Demo",
       email: "demo@stargym.com",
       password: "123456",
-      emailVerified: true,
       gender: "Otro",
       phoneNumber: "600000000",
       dateOfBirth: "2000-01-01",
@@ -107,7 +105,6 @@ function createLocalSession(user) {
     id: user.id || ("usr-" + Date.now()),
     name: user.name || "Usuario",
     email: user.email,
-    emailVerified: Boolean(user.emailVerified),
     gender: user.gender || "Otro",
     phoneNumber: user.phoneNumber || "",
     dateOfBirth: user.dateOfBirth || "",
@@ -306,9 +303,9 @@ function initRegisterPage() {
           return;
         }
 
-        setFeedback(result.message || "Cuenta creada. Revisa tu correo para obtener el código de activación.", false);
+        setFeedback(result.message || "Cuenta creada. Ya puedes iniciar sesión.", false);
         setTimeout(() => {
-          window.location.replace(`verify.html?email=${encodeURIComponent(email)}`);
+          window.location.replace(`login.html?email=${encodeURIComponent(email)}&registered=1`);
         }, 500);
         return;
       }

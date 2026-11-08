@@ -118,8 +118,6 @@ function renderProfile(user) {
   if (!user) return;
   const nameEl = document.getElementById("profile-name");
   const emailEl = document.getElementById("profile-email");
-  const verifiedEl = document.getElementById("profile-verified");
-  const verifiedBadge = document.getElementById("profile-verified-badge");
   const dobEl = document.getElementById("profile-dob");
   const phoneEl = document.getElementById("profile-phone");
   const genderEl = document.getElementById("profile-gender");
@@ -130,14 +128,6 @@ function renderProfile(user) {
   if (phoneEl) phoneEl.textContent = user.phoneNumber || "—";
   if (emailEl) emailEl.textContent = user.email || "—";
   if (genderEl) genderEl.textContent = user.gender || "—";
-  if (verifiedEl) verifiedEl.textContent = user.emailVerified ? "Sí" : "No";
-  if (verifiedBadge) {
-    verifiedBadge.hidden = false;
-    verifiedBadge.textContent = user.emailVerified ? "Cuenta verificada" : "Verificación pendiente";
-    verifiedBadge.classList.toggle("is-ok", Boolean(user.emailVerified));
-    verifiedBadge.classList.toggle("is-warn", !user.emailVerified);
-  }
-
   if (updateForm) {
     const nameInput = updateForm.querySelector('input[name="name"]');
     const phoneInput = updateForm.querySelector('input[name="phoneNumber"]');
