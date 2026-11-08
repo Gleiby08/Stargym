@@ -65,6 +65,7 @@ El servidor estará disponible en `http://localhost:3000` (o el puerto que hayas
 
 - La landing (`/` o `index.html`) mantiene visible la oferta pública y adapta la navegación según la sesión.
 - El dashboard (`dashboard.html`), el perfil (`profile.html`) y el checkout (`checkout.html`) requieren sesión. Las rutas `/mi-perfil` y `/rutinas` llevan a sus páginas privadas correspondientes.
+- El panel `/admin` utiliza el inicio de sesión normal y solo permite operaciones administrativas a la cuenta verificada cuyo correo coincide con `ADMIN_EMAIL`. Desde allí se pueden consultar y editar usuarios, administrar membresías, revisar pagos y cartera, registrar ajustes de saldo con motivo y eliminar cuentas con confirmación por correo. Configura `ADMIN_EMAIL` en `.env` con el correo de tu cuenta administradora; no uses una cuenta sin verificar.
 - Al iniciar sesión tras intentar abrir una página privada, el usuario vuelve a esa página.
 - Cerrar sesión elimina la sesión del navegador y revoca el token actual en el servidor; las rutas privadas de API también rechazan tokens revocados.
 - La notificación y el cierre por inactividad se comparten entre la landing, el dashboard, el perfil y el checkout. Tras un minuto sin actividad, el navegador muestra una notificación; al hacer clic se mantiene la sesión. Si las notificaciones están bloqueadas o no disponibles, se muestra un aviso dentro de la página. La sesión se cierra 15 segundos después del aviso si no hay actividad.

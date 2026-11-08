@@ -132,7 +132,11 @@
       );
       walletChanged = true;
     }
-    if (!wallet.transactions.some((transaction) => transaction.type === "TOPUP" && Number(transaction.amount) > 0) && Number(wallet.balance) !== 0) {
+    const hasBalanceSource = wallet.transactions.some((transaction) =>
+      (transaction.type === "TOPUP" && Number(transaction.amount) > 0) ||
+      (transaction.type === "ADMIN_ADJUSTMENT" && Number(transaction.amount) !== 0)
+    );
+    if (!hasBalanceSource && Number(wallet.balance) !== 0) {
       wallet.balance = 0;
       walletChanged = true;
     }
@@ -161,8 +165,8 @@
     list.innerHTML = tx.map((t) => {
       const sign = t.amount >= 0 ? "+" : "−";
       const abs = Math.abs(Number(t.amount || 0));
-      const label = t.type === "TOPUP" ? "Recarga" : t.type === "MEMBERSHIP" ? "Membresía" : (t.type || "Pago");
-      const meta = t.meta?.planName ? ` · ${t.meta.planName}` : "";
+      const label = t.type === "TOPUP" ? "Recarga" : t.type === "MEMBERSHIP" ? "Membresía" : t.type === "ADMIN_ADJUSTMENT" ? "Ajuste administrativo" : (t.type || "Pago");
+      const meta = t.meta?.reason ? ` · ${t.meta.reason}` : t.meta?.planName ? ` · ${t.meta.planName}` : "";
       const date = t.createdAt ? new Date(t.createdAt).toLocaleString("es-ES") : "";
       return `
         <li class="wallet-tx-item">

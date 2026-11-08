@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Administración | Stargym</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body class="admin-page">
+    <main class="admin-shell">
+      <header class="admin-header">
+        <div>
+          <a class="admin-brand" href="index.html">STARGYM <span>/ ADMIN</span></a>
+          <p>Gestión de usuarios, membresías y cartera</p>
+        </div>
+        <a class="btn btn-outline" href="index.html">Volver a Stargym</a>
+      </header>
+
+      <p class="admin-feedback" id="admin-feedback" hidden role="status" aria-live="polite"></p>
+
+      <section class="admin-overview" aria-label="Resumen">
+        <article class="admin-stat"><span>Usuarios</span><strong id="admin-total-users">—</strong></article>
+        <article class="admin-stat"><span>Correos verificados</span><strong id="admin-verified-users">—</strong></article>
+        <article class="admin-stat"><span>Membresías activas</span><strong id="admin-active-memberships">—</strong></article>
+      </section>
+
+      <div class="admin-layout">
+        <aside class="admin-user-panel">
+          <label class="form-field">
+            <span class="form-label">Buscar usuario</span>
+            <input id="admin-user-search" type="search" placeholder="Nombre o correo" autocomplete="off" />
+          </label>
+          <p class="admin-muted" id="admin-user-count">Cargando usuarios…</p>
+          <ul class="admin-user-list" id="admin-user-list" aria-label="Usuarios"></ul>
+        </aside>
+
+        <section class="admin-detail" id="admin-detail" aria-live="polite">
+          <div class="admin-empty" id="admin-empty">
+            <h1>Panel de administración</h1>
+            <p>Selecciona un usuario para consultar su perfil, membresías, pagos y cartera.</p>
+          </div>
+
+          <div id="admin-user-content" hidden>
+            <div class="admin-user-heading">
+              <div>
+                <p class="admin-eyebrow">Cuenta seleccionada</p>
+                <h1 id="admin-selected-name"></h1>
+                <p class="admin-muted" id="admin-selected-email"></p>
+              </div>
+              <span class="admin-badge" id="admin-verification-badge"></span>
+            </div>
+
+            <section class="admin-card">
+              <h2>Datos del usuario</h2>
+              <form class="admin-form" id="admin-profile-form">
+                <label class="form-field">
+                  <span class="form-label">Nombre</span>
+                  <input name="name" maxlength="100" required />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Teléfono</span>
+                  <input name="phoneNumber" inputmode="tel" />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Fecha de nacimiento</span>
+                  <input name="dateOfBirth" type="date" />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Género</span>
+                  <input name="gender" maxlength="40" />
+                </label>
+                <label class="admin-check">
+                  <input name="emailVerified" type="checkbox" />
+                  <span>Correo verificado</span>
+                </label>
+                <button class="btn btn-primary" type="submit">Guardar perfil</button>
+              </form>
+              <p class="admin-muted" id="admin-account-dates"></p>
+            </section>
+
+            <section class="admin-card">
+              <div class="admin-section-heading">
+                <h2>Membresía</h2>
+                <span class="admin-badge" id="admin-membership-status"></span>
+              </div>
+              <div class="admin-membership-summary" id="admin-membership-summary"></div>
+              <form class="admin-form admin-membership-form" id="admin-membership-form">
+                <label class="form-field">
+                  <span class="form-label">Plan</span>
+                  <select name="planId" required>
+                    <option value="essential">Starter — $39/mes</option>
+                    <option value="elite">ELITE — $79/mes</option>
+                    <option value="pro">CHAMPION — $149/mes</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Vence el</span>
+                  <input name="expiresAt" type="date" required />
+                </label>
+                <button class="btn btn-primary" type="submit">Asignar / cambiar plan</button>
+              </form>
+              <div class="admin-actions">
+                <button class="btn btn-outline" id="admin-renew-membership" type="button">Renovar un mes</button>
+                <button class="btn btn-outline profile-danger-btn" id="admin-cancel-membership" type="button">Cancelar membresía</button>
+              </div>
+              <ul class="admin-history-list" id="admin-membership-history"></ul>
+            </section>
+
+            <section class="admin-card">
+              <div class="admin-section-heading">
+                <h2>Cartera</h2>
+                <strong class="admin-wallet-balance" id="admin-wallet-balance"></strong>
+              </div>
+              <form class="admin-form admin-wallet-form" id="admin-wallet-form">
+                <label class="form-field">
+                  <span class="form-label">Ajuste en USD (+ o −)</span>
+                  <input name="amount" type="number" min="-10000" max="10000" step="0.01" required placeholder="Ej. 10 o -5" />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">Motivo (queda registrado)</span>
+                  <input name="reason" maxlength="240" required placeholder="Describe el motivo del ajuste" />
+                </label>
+                <button class="btn btn-primary" type="submit">Registrar ajuste</button>
+              </form>
+              <h3 class="admin-subheading">Movimientos</h3>
+              <ul class="admin-history-list" id="admin-wallet-history"></ul>
+            </section>
+
+            <section class="admin-card">
+              <h2>Pagos externos</h2>
+              <ul class="admin-history-list" id="admin-payment-history"></ul>
+            </section>
+
+            <section class="admin-card admin-danger-card">
+              <h2>Zona de riesgo</h2>
+              <p>Eliminar una cuenta borra su acceso, cartera, membresías e historial asociado. Esta acción no se puede deshacer.</p>
+              <button class="btn btn-outline profile-danger-btn" id="admin-delete-user" type="button">Eliminar cuenta</button>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="js/admin.js"></script>
+  </body>
+</html>

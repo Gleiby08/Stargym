@@ -1,7 +1,7 @@
 # Variables de entorno (excepto la plantilla de ejemplo)
 .env
 .env.*
-!.env.example
+.env.example
 
 # Dependencias y artefactos de Node
 node_modules/

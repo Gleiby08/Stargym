@@ -41,6 +41,10 @@ if (!MONGODB_URI) {
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
+app.get("/admin", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(path.join(__dirname, "admin.html"));
+});
 
 app.use(express.json({
   verify(req, res, buffer) {
@@ -262,6 +266,49 @@ function sanitizeUser(user) {
   };
 }
 
+function sanitizeAdminUser(user) {
+  const safeUser = sanitizeUser(user);
+  if (!safeUser) return null;
+  return {
+    ...safeUser,
+    enrollments: (Array.isArray(user.enrollments) ? user.enrollments : []).map((enrollment) => ({
+      id: enrollment.id,
+      type: enrollment.type,
+      planId: enrollment.planId,
+      planName: enrollment.planName,
+      price: enrollment.price,
+      currency: enrollment.currency,
+      status: enrollment.status,
+      source: enrollment.source,
+      startedAt: enrollment.startedAt,
+      currentPeriodEnd: enrollment.currentPeriodEnd
+    })),
+    wallet: {
+      balance: Number(user.wallet?.balance || 0),
+      currency: user.wallet?.currency || "USD",
+      transactions: (Array.isArray(user.wallet?.transactions) ? user.wallet.transactions : []).map((transaction) => ({
+        id: transaction.id,
+        type: transaction.type,
+        amount: Number(transaction.amount || 0),
+        currency: transaction.currency || "USD",
+        meta: transaction.meta || {},
+        createdAt: transaction.createdAt
+      }))
+    },
+    paymentOrders: (Array.isArray(user.paymentOrders) ? user.paymentOrders : []).map((payment) => ({
+      id: payment.id,
+      provider: payment.provider,
+      kind: payment.kind,
+      amount: Number(payment.amount || 0),
+      currency: payment.currency || "USD",
+      planId: payment.planId || null,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      succeededAt: payment.succeededAt || null
+    }))
+  };
+}
+
 function ensureWallet(user) {
   if (!user.wallet) {
     user.wallet = { balance: 0, currency: "USD", transactions: [], topupIntents: [] };
@@ -284,10 +331,11 @@ function ensureWallet(user) {
       (transaction) => transaction.type !== "TOPUP" || transaction.meta?.planName !== "Bono de bienvenida"
     );
   }
-  const hasCompletedTopup = user.wallet.transactions.some(
-    (transaction) => transaction.type === "TOPUP" && Number(transaction.amount) > 0
+  const hasBalanceSource = user.wallet.transactions.some((transaction) =>
+    (transaction.type === "TOPUP" && Number(transaction.amount) > 0) ||
+    (transaction.type === "ADMIN_ADJUSTMENT" && Number(transaction.amount) !== 0)
   );
-  if (!hasCompletedTopup) user.wallet.balance = 0;
+  if (!hasBalanceSource) user.wallet.balance = 0;
 }
 
 function ensureEnrollments(user) {
@@ -691,6 +739,7 @@ async function requireAuth(req, res, next) {
       sub: user.id,
       email: user.email,
       name: user.name,
+      emailVerified: Boolean(user.emailVerified),
     };
     req.authToken = token;
     return next();
@@ -702,7 +751,7 @@ async function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   const email = String(req.auth?.email || "").toLowerCase();
-  if (!ADMIN_EMAIL || email !== ADMIN_EMAIL) {
+  if (!ADMIN_EMAIL || email !== ADMIN_EMAIL || !req.auth?.emailVerified) {
     return res.status(403).json({ message: "No autorizado (admin requerido)." });
   }
   return next();
@@ -1377,11 +1426,11 @@ app.post("/api/billing/cancel", requireAuth, async (req, res) => {
   }
 });
 
-// CRUD (admin): listar/ver/eliminar usuarios
+// Operaciones administrativas sobre usuarios, membresías y cartera.
 app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   try {
     const users = await readUsers();
-    return res.json({ users: users.map(sanitizeUser) });
+    return res.json({ users: users.map(sanitizeAdminUser) });
   } catch (error) {
     return res.status(500).json({ message: `No se pudo listar usuarios: ${error.message}` });
   }
@@ -1393,9 +1442,163 @@ app.get("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
     const users = await readUsers();
     const user = users.find((u) => u.id === id);
     if (!user) return res.status(404).json({ message: "Usuario no encontrado." });
-    return res.json({ user: sanitizeUser(user) });
+    return res.json({ user: sanitizeAdminUser(user) });
   } catch (error) {
     return res.status(500).json({ message: `No se pudo obtener usuario: ${error.message}` });
+  }
+});
+
+app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, phoneNumber, dateOfBirth, gender, emailVerified } = req.body || {};
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      name.trim().length > 100 ||
+      typeof phoneNumber !== "string" ||
+      (dateOfBirth !== null && typeof dateOfBirth !== "string") ||
+      typeof gender !== "string" ||
+      typeof emailVerified !== "boolean"
+    ) {
+      return res.status(400).json({ message: "Revisa los datos del perfil." });
+    }
+
+    const cleanedPhone = phoneNumber.replace(/\D/g, "");
+    if (phoneNumber && (cleanedPhone.length < 7 || cleanedPhone.length > 15)) {
+      return res.status(400).json({ message: "El teléfono debe tener entre 7 y 15 dígitos." });
+    }
+    if (dateOfBirth) {
+      const parts = dateOfBirth.split("-").map(Number);
+      const calendarDate = parts.length === 3 ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
+        !Number.isFinite(calendarDate?.getTime()) ||
+        calendarDate.toISOString().slice(0, 10) !== dateOfBirth
+      ) {
+        return res.status(400).json({ message: "La fecha de nacimiento no es válida." });
+      }
+    }
+
+    const users = await readUsers();
+    const user = users.find((item) => item.id === String(req.params.id || ""));
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado." });
+    if (normalizeEmail(user.email) === ADMIN_EMAIL && !emailVerified) {
+      return res.status(403).json({ message: "No se puede desactivar la verificación de la cuenta administradora." });
+    }
+
+    user.name = name.trim();
+    user.phoneNumber = phoneNumber.trim() || null;
+    user.dateOfBirth = dateOfBirth || null;
+    user.gender = gender.trim().slice(0, 40) || null;
+    user.emailVerified = emailVerified;
+    user.updatedAt = new Date().toISOString();
+    await writeUsers(users);
+    return res.json({ message: "Perfil actualizado.", user: sanitizeAdminUser(user) });
+  } catch (error) {
+    console.error("No se pudo actualizar perfil desde el panel admin:", error);
+    return res.status(500).json({ message: "No se pudo actualizar el perfil." });
+  }
+});
+
+app.patch("/api/admin/users/:id/membership", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const action = String(req.body?.action || "");
+    const users = await readUsers();
+    const user = users.find((item) => item.id === String(req.params.id || ""));
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado." });
+    ensureEnrollments(user);
+    const active = findMembershipEnrollment(user);
+
+    if (action === "cancel") {
+      if (!active) return res.status(409).json({ message: "El usuario no tiene una membresía activa." });
+      active.status = "CANCELED";
+      active.canceledAt = new Date().toISOString();
+    } else if (action === "renew") {
+      if (!active) return res.status(409).json({ message: "Asigna una membresía antes de renovarla." });
+      const currentEnd = new Date(active.currentPeriodEnd || Date.now());
+      active.currentPeriodEnd = addOneMonth(currentEnd > new Date() ? currentEnd : new Date()).toISOString();
+    } else if (action === "assign") {
+      const planId = String(req.body?.planId || "").toLowerCase();
+      const plan = PLANS[planId];
+      const expiry = String(req.body?.expiresAt || "");
+      const expiresAt = new Date(`${expiry}T23:59:59.999Z`);
+      const expiryDateParts = expiry.split("-").map(Number);
+      const expiryCalendarDate = expiryDateParts.length === 3
+        ? new Date(Date.UTC(expiryDateParts[0], expiryDateParts[1] - 1, expiryDateParts[2]))
+        : null;
+      const validExpiryDate = /^\d{4}-\d{2}-\d{2}$/.test(expiry) &&
+        Number.isFinite(expiryCalendarDate?.getTime()) &&
+        expiryCalendarDate.toISOString().slice(0, 10) === expiry;
+      let maximumExpiry = new Date();
+      for (let month = 0; month < 5; month += 1) maximumExpiry = addOneMonth(maximumExpiry);
+      if (!plan) return res.status(400).json({ message: "Selecciona un plan válido." });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry) || !validExpiryDate || !Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date() || expiresAt > maximumExpiry) {
+        return res.status(400).json({ message: "La fecha de vencimiento debe ser futura y no superar cinco meses." });
+      }
+
+      user.enrollments.forEach((enrollment) => {
+        if (enrollment.type === "PLAN" && enrollment.status === "ACTIVE") {
+          enrollment.status = "CANCELED";
+          enrollment.canceledAt = new Date().toISOString();
+        }
+      });
+      const startedAt = new Date();
+      user.enrollments.unshift({
+        id: crypto.randomUUID(),
+        type: "PLAN",
+        planId: plan.id,
+        planName: plan.name,
+        price: plan.price,
+        currency: PAYMENT_CURRENCY,
+        status: "ACTIVE",
+        source: "admin",
+        startedAt: startedAt.toISOString(),
+        currentPeriodEnd: expiresAt.toISOString()
+      });
+    } else {
+      return res.status(400).json({ message: "Acción de membresía inválida." });
+    }
+
+    user.updatedAt = new Date().toISOString();
+    await writeUsers(users);
+    return res.json({ message: "Membresía actualizada.", user: sanitizeAdminUser(user) });
+  } catch (error) {
+    console.error("No se pudo actualizar membresía desde el panel admin:", error);
+    return res.status(500).json({ message: "No se pudo actualizar la membresía." });
+  }
+});
+
+app.post("/api/admin/users/:id/wallet-adjustments", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const amount = Number(req.body?.amount);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 10000 || !reason || reason.length > 240) {
+      return res.status(400).json({ message: "Indica un ajuste entre -10 000 y 10 000 USD y un motivo de hasta 240 caracteres." });
+    }
+
+    const adjustment = Math.round(amount * 100) / 100;
+    const users = await readUsers();
+    const user = users.find((item) => item.id === String(req.params.id || ""));
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado." });
+    ensureWallet(user);
+    const nextBalance = Math.round((user.wallet.balance + adjustment) * 100) / 100;
+    if (nextBalance < 0) return res.status(409).json({ message: "El ajuste no puede dejar la cartera con saldo negativo." });
+
+    user.wallet.balance = nextBalance;
+    user.wallet.transactions.unshift({
+      id: crypto.randomUUID(),
+      type: "ADMIN_ADJUSTMENT",
+      amount: adjustment,
+      currency: user.wallet.currency,
+      meta: { reason, adminEmail: req.auth.email },
+      createdAt: new Date().toISOString()
+    });
+    user.updatedAt = new Date().toISOString();
+    await writeUsers(users);
+    return res.json({ message: "Saldo ajustado y registrado.", user: sanitizeAdminUser(user) });
+  } catch (error) {
+    console.error("No se pudo ajustar cartera desde el panel admin:", error);
+    return res.status(500).json({ message: "No se pudo ajustar la cartera." });
   }
 });
 
@@ -1405,11 +1608,18 @@ app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) =
     const users = await readUsers();
     const idx = users.findIndex((u) => u.id === id);
     if (idx === -1) return res.status(404).json({ message: "Usuario no encontrado." });
+    if (id === String(req.auth.sub || "") || normalizeEmail(users[idx].email) === ADMIN_EMAIL) {
+      return res.status(403).json({ message: "No se puede eliminar la cuenta administradora." });
+    }
+    if (normalizeEmail(req.body?.confirmEmail) !== normalizeEmail(users[idx].email)) {
+      return res.status(400).json({ message: "Confirma la eliminación escribiendo el correo exacto del usuario." });
+    }
     users.splice(idx, 1);
     await writeUsers(users);
     return res.json({ message: "Usuario eliminado." });
   } catch (error) {
-    return res.status(500).json({ message: `No se pudo eliminar usuario: ${error.message}` });
+    console.error("No se pudo eliminar usuario desde el panel admin:", error);
+    return res.status(500).json({ message: "No se pudo eliminar el usuario." });
   }
 });
 

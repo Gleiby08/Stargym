@@ -102,8 +102,19 @@
               <span class="form-label">Recargar (USD)</span>
               <input type="number" name="amount" min="1" step="1" required placeholder="Ej. 20" />
             </label>
-            <button type="button" class="btn btn-primary btn-block" data-wallet-payment="paypal" disabled>Recargar con PayPal</button>
-            <button type="button" class="btn btn-outline btn-block" data-wallet-payment="binance" disabled>Recargar con Binance Pay</button>
+            <button type="button" class="btn btn-primary btn-block" data-wallet-payment="paypal" disabled>
+              <svg class="payment-provider__logo payment-provider__logo--paypal" viewBox="0 0 32 24" aria-hidden="true" focusable="false">
+                <path d="M12.1 2h8.1c4.2 0 6.3 2.2 5.6 6.2-.7 4.1-3.3 6.2-7.5 6.2h-2.6l-1.1 7.1H8.7L12.1 2Z" fill="#009CDE" />
+                <path d="M8.2 5.4h8.1c4.2 0 6.3 2.2 5.6 6.2-.7 4.1-3.3 6.2-7.5 6.2h-2.6l-1.1 7.1H4.8L8.2 5.4Z" fill="#003087" />
+              </svg>
+              Recargar con PayPal
+            </button>
+            <button type="button" class="btn btn-outline btn-block" data-wallet-payment="binance" disabled>
+              <svg class="payment-provider__logo payment-provider__logo--binance" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                <path fill="#F0B90B" d="m16 2.8 4 4-4 4-4-4 4-4Zm-8 8 4 4-4 4-4-4 4-4Zm16 0 4 4-4 4-4-4 4-4Zm-8 8 4 4-4 4-4-4 4-4Zm0-8 4 4-4 4-4-4 4-4Zm-8-4 3 3-3 3-3-3 3-3Zm16 0 3 3-3 3-3-3 3-3Zm-8 16 3 3-3 3-3-3 3-3Z" />
+              </svg>
+              Recargar con Binance Pay
+            </button>
           </form>
           <div class="wallet-tx" style="margin-top: 1.5rem;">
             <h3 class="profile-card__title wallet-subtitle">Movimientos recientes</h3>

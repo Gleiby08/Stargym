@@ -87,7 +87,11 @@ function normalizeLocalWallet(user) {
       (transaction) => transaction.type !== "TOPUP" || transaction.meta?.planName !== "Bono de bienvenida"
     );
   }
-  if (!user.wallet.transactions.some((transaction) => transaction.type === "TOPUP" && Number(transaction.amount) > 0)) {
+  const hasBalanceSource = user.wallet.transactions.some((transaction) =>
+    (transaction.type === "TOPUP" && Number(transaction.amount) > 0) ||
+    (transaction.type === "ADMIN_ADJUSTMENT" && Number(transaction.amount) !== 0)
+  );
+  if (!hasBalanceSource) {
     user.wallet.balance = 0;
   }
 }
@@ -138,7 +142,7 @@ function setButtonLoading(form, loading) {
 }
 
 function getPostLoginDestination() {
-  const privatePages = new Set(["dashboard.html", "profile.html", "checkout.html"]);
+  const privatePages = new Set(["dashboard.html", "profile.html", "checkout.html", "admin.html"]);
   const requested = new URLSearchParams(window.location.search).get("redirect");
   return privatePages.has(requested) ? requested : "index.html";
 }

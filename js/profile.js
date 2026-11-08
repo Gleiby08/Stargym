@@ -321,6 +321,16 @@ function money(value) {
   return n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
 function renderWallet(wallet) {
   if (!Array.isArray(wallet.transactions)) wallet.transactions = [];
   const welcomeBonusTotal = wallet.transactions
@@ -334,7 +344,11 @@ function renderWallet(wallet) {
     );
     walletChanged = true;
   }
-  if (!wallet.transactions.some((transaction) => transaction.type === "TOPUP" && Number(transaction.amount) > 0) && Number(wallet.balance) !== 0) {
+  const hasBalanceSource = wallet.transactions.some((transaction) =>
+    (transaction.type === "TOPUP" && Number(transaction.amount) > 0) ||
+    (transaction.type === "ADMIN_ADJUSTMENT" && Number(transaction.amount) !== 0)
+  );
+  if (!hasBalanceSource && Number(wallet.balance) !== 0) {
     wallet.balance = 0;
     walletChanged = true;
   }
@@ -361,10 +375,10 @@ function renderWallet(wallet) {
       .map((t) => {
         const sign = t.amount >= 0 ? "+" : "−";
         const abs = Math.abs(Number(t.amount || 0));
-        const label = t.type === "TOPUP" ? "Recarga" : t.type === "MEMBERSHIP" ? "Membresía" : t.type;
-        const meta = t.meta?.planName ? ` · ${t.meta.planName}` : "";
+        const label = t.type === "TOPUP" ? "Recarga" : t.type === "MEMBERSHIP" ? "Membresía" : t.type === "ADMIN_ADJUSTMENT" ? "Ajuste administrativo" : t.type;
+        const meta = t.meta?.reason ? ` · ${t.meta.reason}` : t.meta?.planName ? ` · ${t.meta.planName}` : "";
         const date = t.createdAt ? new Date(t.createdAt).toLocaleString("es-ES") : "";
-        return `<li class="wallet-tx-item"><b>${label}${meta}</b><span>${date}</span><span class="wallet-amount">${sign}${money(abs)} ${t.currency || "USD"}</span></li>`;
+        return `<li class="wallet-tx-item"><b>${escapeHtml(label + meta)}</b><span>${escapeHtml(date)}</span><span class="wallet-amount">${sign}${money(abs)} ${escapeHtml(t.currency || "USD")}</span></li>`;
       })
       .join("");
   }

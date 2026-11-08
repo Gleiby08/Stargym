@@ -46,7 +46,6 @@ function initScrollEffects() {
     typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const root = document.documentElement;
   const header = document.querySelector("header");
-  const parallaxEls = prefersReduced ? [] : Array.from(document.querySelectorAll(".js-parallax"));
   const sections = Array.from(document.querySelectorAll(".scroll-section"));
   const navLinks = Array.from(document.querySelectorAll('.nav a[href^="#"]'));
   const navMap = new Map(
@@ -61,7 +60,6 @@ function initScrollEffects() {
   let ticking = false;
   let activeSectionId = "";
   let lastScrollY = window.scrollY || window.pageYOffset || 0;
-  let directionClassTimer;
 
   const updateOnScroll = () => {
     ticking = false;
@@ -69,10 +67,7 @@ function initScrollEffects() {
     const scrollY = window.scrollY || window.pageYOffset || 0;
     const maxScroll = Math.max(document.body.scrollHeight - window.innerHeight, 1);
     const progressRatio = Math.min(scrollY / maxScroll, 1);
-    const progress = progressRatio * 100;
-    root.style.setProperty("--scroll-progress", `${progress}%`);
-    root.style.setProperty("--scroll-progress-glow-x", `${progress}%`);
-    root.style.setProperty("--scroll-depth", progressRatio.toFixed(3));
+    root.style.setProperty("--scroll-progress-ratio", progressRatio.toFixed(4));
 
     if (header) {
       header.classList.toggle("is-scrolled", scrollY > 18);
@@ -86,44 +81,24 @@ function initScrollEffects() {
     }
     lastScrollY = scrollY;
 
-    let bestSection = "";
-    let bestVisibility = 0;
-    const viewportHeight = window.innerHeight || 1;
-
-    sections.forEach((section) => {
-      const rect = section.getBoundingClientRect();
-      const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
-      const visibility = Math.min(visibleHeight / Math.max(Math.min(rect.height, viewportHeight), 1), 1);
-
-      const sectionProgressRaw = (viewportHeight - rect.top) / (viewportHeight + rect.height);
-      const sectionProgress = Math.max(0, Math.min(sectionProgressRaw, 1));
-      section.style.setProperty("--section-progress", sectionProgress.toFixed(3));
-
-      if (visibility > bestVisibility) {
-        bestVisibility = visibility;
-        bestSection = section.id;
-      }
-    });
-
-    if (bestSection && bestSection !== activeSectionId) {
-      activeSectionId = bestSection;
-      navLinks.forEach((link) => link.classList.remove("active-link"));
-      const activeLink = navMap.get(bestSection);
-      if (activeLink) {
-        activeLink.classList.add("active-link");
-      }
-    }
-
-    if (parallaxEls.length) {
-      const viewportCenter = window.innerHeight * 0.5;
-      parallaxEls.forEach((el) => {
-        const speed = Number(el.dataset.parallaxSpeed || 0.12);
-        const rect = el.getBoundingClientRect();
-        const elementCenter = rect.top + rect.height / 2;
-        const distance = elementCenter - viewportCenter;
-        const offset = Math.max(Math.min(distance * -speed, 34), -34);
-        el.style.setProperty("--parallax-offset", `${offset.toFixed(2)}px`);
+    if (typeof IntersectionObserver === "undefined" && sections.length) {
+      let bestSection = "";
+      let bestVisibility = 0;
+      const viewportHeight = window.innerHeight || 1;
+      sections.forEach((section) => {
+        const rect = section.getBoundingClientRect();
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+        const visibility = Math.min(visibleHeight / Math.max(Math.min(rect.height, viewportHeight), 1), 1);
+        if (visibility > bestVisibility) {
+          bestVisibility = visibility;
+          bestSection = section.id;
+        }
       });
+      if (bestSection && bestSection !== activeSectionId) {
+        activeSectionId = bestSection;
+        navLinks.forEach((link) => link.classList.remove("active-link"));
+        navMap.get(bestSection)?.classList.add("active-link");
+      }
     }
   };
 
@@ -138,17 +113,31 @@ function initScrollEffects() {
   window.addEventListener("scroll", requestTick, { passive: true });
   window.addEventListener("resize", requestTick);
 
-  if (!prefersReduced && sections.length && typeof IntersectionObserver !== "undefined") {
+  if (sections.length && typeof IntersectionObserver !== "undefined") {
+    const visibleSections = new Map();
     const sectionObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           entry.target.classList.toggle("is-active-section", entry.isIntersecting);
+          if (entry.isIntersecting) {
+            visibleSections.set(entry.target, entry.intersectionRatio);
+          } else {
+            visibleSections.delete(entry.target);
+          }
         });
+        const activeSection = Array.from(visibleSections.entries()).reduce(
+          (best, [section, ratio]) => (ratio > best.ratio ? { section, ratio } : best),
+          { section: null, ratio: 0 }
+        ).section;
+        if (activeSection?.id) {
+          navLinks.forEach((link) => link.classList.remove("active-link"));
+          navMap.get(activeSection.id)?.classList.add("active-link");
+        }
       },
-      { root: null, threshold: 0.45 }
+      { root: null, rootMargin: "-15% 0px -15% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] }
     );
     sections.forEach((section) => sectionObserver.observe(section));
-  } else {
+  } else if (prefersReduced || typeof IntersectionObserver === "undefined") {
     sections.forEach((section) => section.classList.add("is-active-section"));
   }
 }
@@ -308,11 +297,14 @@ function initBackToTop() {
   btn.setAttribute("aria-label", "Volver arriba");
   document.body.appendChild(btn);
 
+  let ticking = false;
   window.addEventListener("scroll", () => {
-    if (window.scrollY > 600) {
-      btn.classList.add("is-visible");
-    } else {
-      btn.classList.remove("is-visible");
+    if (!ticking) {
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        btn.classList.toggle("is-visible", window.scrollY > 600);
+        ticking = false;
+      });
     }
   }, { passive: true });
 
