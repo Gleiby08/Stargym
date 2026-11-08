@@ -19,6 +19,10 @@ if (JWT_SECRET.length < 32) {
 }
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const GMAIL_CLIENT_ID = String(process.env.GMAIL_CLIENT_ID || "").trim();
+const GMAIL_CLIENT_SECRET = String(process.env.GMAIL_CLIENT_SECRET || "").trim();
+const GMAIL_REFRESH_TOKEN = String(process.env.GMAIL_REFRESH_TOKEN || "").trim();
+let gmailAccessTokenCache = null;
 
 const USERS_FILE_PATH = path.join(__dirname, "data", "users.json");
 const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
@@ -760,8 +764,17 @@ function requireAdmin(req, res, next) {
 
 function hasEmailProviderConfig() {
   if (RESEND_API_KEY) return Boolean(process.env.FROM_EMAIL);
+  if (GMAIL_CLIENT_ID || GMAIL_CLIENT_SECRET || GMAIL_REFRESH_TOKEN) {
+    return Boolean(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN && process.env.FROM_EMAIL);
+  }
   const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "FROM_EMAIL"];
   return required.every((key) => Boolean(process.env[key]));
+}
+
+function getEmailProvider() {
+  if (RESEND_API_KEY) return "Resend";
+  if (GMAIL_CLIENT_ID || GMAIL_CLIENT_SECRET || GMAIL_REFRESH_TOKEN) return "Gmail API";
+  return "SMTP";
 }
 
 function escapeHtml(value) {
@@ -772,6 +785,81 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[character]);
+}
+
+function isValidEmailAddress(email) {
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(String(email));
+}
+
+async function getGmailAccessToken() {
+  if (gmailAccessTokenCache && gmailAccessTokenCache.expiresAt > Date.now() + 30000) {
+    return gmailAccessTokenCache.value;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GMAIL_CLIENT_ID,
+        client_secret: GMAIL_CLIENT_SECRET,
+        refresh_token: GMAIL_REFRESH_TOKEN,
+        grant_type: "refresh_token"
+      }),
+      signal: controller.signal
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.access_token) {
+      throw new Error(result.error_description || result.error || `Google respondió ${response.status} al autorizar Gmail.`);
+    }
+    gmailAccessTokenCache = {
+      value: result.access_token,
+      expiresAt: Date.now() + Number(result.expires_in || 3600) * 1000
+    };
+    return gmailAccessTokenCache.value;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sendGmailApiEmail({ email, from, html }) {
+  if (!isValidEmailAddress(email) || /[\r\n]/.test(from)) {
+    throw new Error("El remitente o destinatario contiene caracteres inválidos.");
+  }
+  const accessToken = await getGmailAccessToken();
+  const subject = Buffer.from("Tu código para activar tu cuenta de Stargym", "utf8").toString("base64");
+  const message = [
+    `From: ${from}`,
+    `To: ${email}`,
+    `Subject: =?UTF-8?B?${subject}?=`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from(html, "utf8").toString("base64")
+  ].join("\r\n");
+  const raw = Buffer.from(message, "utf8").toString("base64url");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ raw }),
+      signal: controller.signal
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.error?.message || `Gmail API respondió ${response.status} al enviar el correo.`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function sendVerificationEmail({ email, name, code }) {
@@ -813,6 +901,11 @@ async function sendVerificationEmail({ email, name, code }) {
     }
   }
 
+  if (GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN) {
+    await sendGmailApiEmail({ email, from: process.env.FROM_EMAIL, html });
+    return;
+  }
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
@@ -842,7 +935,7 @@ app.post("/api/auth/register", async (req, res) => {
   try {
     if (!hasEmailProviderConfig()) {
       return res.status(503).json({
-        message: "El envío de correos no está configurado. Configura RESEND_API_KEY y un remitente verificado en Render."
+        message: "El proveedor de correo no está configurado correctamente. Completa las variables de Resend, Gmail API o SMTP."
       });
     }
 
@@ -855,6 +948,9 @@ app.post("/api/auth/register", async (req, res) => {
 
     if (!name || !email || password.length < 6 || !dateOfBirth || !gender) {
       return res.status(400).json({ message: "Datos invalidos o incompletos." });
+    }
+    if (!isValidEmailAddress(email)) {
+      return res.status(400).json({ message: "Ingresa un correo electrónico válido." });
     }
 
     if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
@@ -928,7 +1024,9 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(502).json({
         message: RESEND_API_KEY
           ? "Resend no pudo enviar el código. Revisa RESEND_API_KEY y que FROM_EMAIL pertenezca a un dominio verificado."
-          : "No se pudo enviar el código por SMTP. Render Free bloquea SMTP; configura Resend para enviar correos."
+          : getEmailProvider() === "Gmail API"
+            ? "Gmail API no pudo enviar el código. Revisa las credenciales OAuth, los permisos de Gmail y el remitente configurado."
+            : "No se pudo enviar el código por SMTP. Render Free bloquea SMTP; configura un proveedor por HTTPS o usa un plan compatible."
       });
     }
 
@@ -996,11 +1094,11 @@ app.post("/api/auth/verify", async (req, res) => {
 app.post("/api/auth/resend-verification", async (req, res) => {
   try {
     if (!hasEmailProviderConfig()) {
-      return res.status(503).json({ message: "El envío de correos no está configurado." });
+      return res.status(503).json({ message: "El proveedor de correo no está configurado correctamente." });
     }
 
     const email = normalizeEmail(req.body?.email);
-    if (!email) return res.status(400).json({ message: "Correo requerido." });
+    if (!isValidEmailAddress(email)) return res.status(400).json({ message: "Ingresa un correo electrónico válido." });
 
     const users = await readUsers();
     const user = users.find((item) => item.email === email);
@@ -1027,7 +1125,11 @@ app.post("/api/auth/resend-verification", async (req, res) => {
       await sendVerificationEmail({ email, name: user.name, code });
     } catch (error) {
       console.error("No se pudo reenviar el código de verificación:", error);
-      return res.status(502).json({ message: "No se pudo enviar el código. Inténtalo de nuevo más tarde." });
+      return res.status(502).json({
+        message: getEmailProvider() === "Gmail API"
+          ? "Gmail API no pudo enviar el código. Revisa las credenciales OAuth, los permisos de Gmail y el remitente configurado."
+          : "No se pudo enviar el código. Revisa la configuración del proveedor e inténtalo de nuevo."
+      });
     }
 
     return res.json({ message: "Te enviamos un nuevo código de verificación." });

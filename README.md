@@ -45,10 +45,20 @@ Al crear una cuenta, Stargym envía un código de seis dígitos por correo. La p
 Configura un proveedor de correo antes de iniciar el servidor:
 
 *   **Resend:** configura `RESEND_API_KEY` y `FROM_EMAIL` con una dirección de un dominio verificado en Resend.
+*   **Gmail API (recomendado para Render Free sin dominio propio):** configura `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` y `FROM_EMAIL` con la cuenta Gmail que autorizaste.
 *   **SMTP:** configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` y `FROM_EMAIL`. Para Gmail utiliza una contraseña de aplicación, no la contraseña normal.
 *   `APP_BASE_URL`: URL pública de Stargym en producción; en local, `http://localhost:3000`.
 
-En Render Free no se permite el tráfico SMTP saliente en los puertos `25`, `465` o `587`. Para ese plan, crea una clave API en Resend, verifica un dominio que controles y configura `RESEND_API_KEY` y `FROM_EMAIL` en las variables de entorno de Render. Usa un remitente como `Stargym <no-reply@tu-dominio.com>`. El servidor usa Resend por HTTPS cuando `RESEND_API_KEY` está configurada; si no, conserva el envío SMTP para otros proveedores o despliegues.
+En Render Free no se permite el tráfico SMTP saliente en los puertos `25`, `465` o `587`. Gmail API envía por HTTPS y no requiere dominio propio:
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), crea un proyecto y habilita **Gmail API**.
+2. Configura la pantalla de consentimiento OAuth. Si la aplicación está en modo de prueba, agrega como usuario de prueba la cuenta Gmail desde la que enviarás los correos.
+3. Crea un cliente OAuth de tipo **Web application** y agrega `https://developers.google.com/oauthplayground` como URI de redirección autorizada.
+4. Abre [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/), entra en la configuración (ícono de engranaje), activa **Use your own OAuth credentials** y coloca el Client ID y Client Secret.
+5. En el paso 1 autoriza el scope `https://www.googleapis.com/auth/gmail.send` con la cuenta Gmail remitente. En el paso 2 intercambia el código y copia el **Refresh token**.
+6. En Render, agrega `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` y `FROM_EMAIL`. Usa como remitente la misma cuenta Gmail autorizada, por ejemplo `Stargym <tu-cuenta@gmail.com>`. Deja `RESEND_API_KEY` vacío para que se seleccione Gmail API.
+
+El orden de selección es Resend, Gmail API y SMTP. Si Gmail API está configurada pero falla, el servidor informa el error y no cambia silenciosamente a SMTP. Los tokens OAuth de una app externa que permanezca en modo de prueba pueden caducar a los 7 días; para uso continuo revisa el estado de publicación y los requisitos de verificación OAuth de Google. Guarda las credenciales solo en las variables privadas de Render o en `.env` local; no las compartas ni las subas al repositorio.
 
 Si el proveedor de correo no está configurado o falla el envío, no se activa la cuenta. Para desarrollo local puedes copiar `.env.example` a `.env` y reemplazar los valores de ejemplo por los tuyos. En producción, configura las variables en el panel de Render y reinicia o redespliega el servicio. No compartas ni subas `.env` ni claves API.
 
